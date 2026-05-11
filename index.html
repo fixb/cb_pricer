@@ -610,7 +610,7 @@
       <!-- Greeks chart -->
       <div class="chart-card">
         <div class="chart-header">
-          <div class="chart-title">Delta &amp; Gamma <span style="color: var(--text-mute); font-size: 13px; font-style: normal;">— BS solid · Binomial dashed</span></div>
+          <div class="chart-title">Delta &amp; Gamma <span style="color: var(--text-mute); font-size: 13px; font-style: normal;">— sensitivity profile</span></div>
           <div class="legend">
             <div class="legend-item"><div class="legend-dot" style="background: var(--bull);"></div>Delta (left)</div>
             <div class="legend-item"><div class="legend-dot" style="background: var(--amber);"></div>Gamma (right)</div>
@@ -1139,14 +1139,10 @@ const mainChart = makeChart('chart_main', [
 ], { yLabel: 'Price ($)' });
 
 const greeksChart = makeChart('chart_greeks', [
-  { label: 'Delta (BS)', borderColor: '#6ab87f', data: [], borderWidth: 2, fill: false,
+  { label: 'Delta', borderColor: '#6ab87f', data: [], borderWidth: 2, fill: false,
     pointRadius: 0, tension: 0.2, yAxisID: 'y' },
-  { label: 'Gamma (BS)', borderColor: '#d4a574', data: [], borderWidth: 2, fill: false,
-    pointRadius: 0, tension: 0.2, yAxisID: 'y1' },
-  { label: 'Delta (Bin)', borderColor: '#6ab87f', borderDash: [5, 4],
-    data: [], borderWidth: 1.5, fill: false, pointRadius: 0, tension: 0.2, yAxisID: 'y' },
-  { label: 'Gamma (Bin)', borderColor: '#d4a574', borderDash: [5, 4],
-    data: [], borderWidth: 1.5, fill: false, pointRadius: 0, tension: 0.2, yAxisID: 'y1' }
+  { label: 'Gamma', borderColor: '#d4a574', data: [], borderWidth: 2, fill: false,
+    pointRadius: 0, tension: 0.2, yAxisID: 'y1' }
 ], {
   scales: {
     y:  { position: 'left',  grid: { color: grid }, ticks: { color: tickColor },
@@ -1434,29 +1430,6 @@ function refresh() {
   document.getElementById('o_vega_bin').textContent  = (vegaBin / face * 10000).toFixed(1) + ' bps';
   const tBinBps = thetaDayBin / face * 10000;
   document.getElementById('o_theta_bin').textContent = (tBinBps >= 0 ? '+' : '') + tBinBps.toFixed(1) + ' bps';
-
-  // ── Binomial delta/gamma curves via FD on a coarser grid (100-step tree)
-  const Nbin = 30;
-  const binPriceFast = (S_, T_, sig_) =>
-    (params.callable
-      ? cbPriceBinomialTF(S_, K, T_, r, q, sig_, face, coupon, spread, 100, callOpts)
-      : cbPriceBinomialTF(S_, K, T_, r, q, sig_, face, coupon, spread, 100)
-    ).price;
-  const deltaBinCurve = [], gammaBinCurve = [];
-  for (let i = 0; i <= Nbin; i++) {
-    const s = sMin + (sMax - sMin) * i / Nbin;
-    const eps = Math.max(0.01 * s, 0.5);
-    const cb0 = binPriceFast(s, Teff, iv);
-    const cbU = binPriceFast(s + eps, Teff, iv);
-    const cbD = binPriceFast(Math.max(s - eps, 1e-4), Teff, iv);
-    const dBin = (cbU - cbD) / (2 * eps);
-    const gBin = (cbU - 2 * cb0 + cbD) / (eps * eps);
-    deltaBinCurve.push({ x: s, y: dBin * 100 });
-    gammaBinCurve.push({ x: s, y: gBin });
-  }
-  greeksChart.data.datasets[2].data = deltaBinCurve;
-  greeksChart.data.datasets[3].data = gammaBinCurve;
-  greeksChart.update('none');
 
   // Issuer call cost = value the call extracts from the holder vs uncallable bond
   const callCost = binNoCall.price - bin.price;
