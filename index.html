@@ -450,6 +450,33 @@
       </div>
 
       <div class="group">
+        <div class="group-title">Market Calibration</div>
+
+        <div class="ctrl-toggle">
+          <span class="ctrl-label">Match Bloomberg/FTSE</span>
+          <input type="checkbox" id="v_calibrate">
+        </div>
+
+        <div class="ctrl" id="ctrl_targetconvprem">
+          <div class="ctrl-row"><span class="ctrl-label">Target conv. premium <span class="unit">(%)</span></span><input type="number" class="ctrl-value" id="v_targetconvprem" value="25.00" step="any"></div>
+          <input type="range" id="r_targetconvprem" min="-20" max="200" step="0.5" value="25">
+        </div>
+
+        <div class="ctrl" id="ctrl_targetivprem">
+          <div class="ctrl-row"><span class="ctrl-label">Target IV premium <span class="unit">(%)</span></span><input type="number" class="ctrl-value" id="v_targetivprem" value="10.00" step="any"></div>
+          <input type="range" id="r_targetivprem" min="-20" max="200" step="0.5" value="10">
+        </div>
+
+        <div id="calib_readout" style="font-size: 11px; color: var(--text-mute); font-style: italic; line-height: 1.6; margin-top: 6px;">
+          Implied σ: <span id="o_implied_iv" style="color: var(--amber); font-family: 'JetBrains Mono', monospace; font-style: normal;">—</span><br>
+          Implied spread: <span id="o_implied_spread" style="color: var(--amber); font-family: 'JetBrains Mono', monospace; font-style: normal;">—</span><br>
+          Implied S*: <span id="o_implied_s" style="color: #6ab87f; font-family: 'JetBrains Mono', monospace; font-style: normal;">—</span><br>
+          ΔCB: <span id="o_adj_cb" style="color: var(--amber); font-family: 'JetBrains Mono', monospace; font-style: normal;">—</span>
+          &nbsp;<span style="opacity:0.7;">(opt <span id="o_adj_opt" style="font-family: 'JetBrains Mono', monospace;">—</span> · floor <span id="o_adj_bf" style="font-family: 'JetBrains Mono', monospace;">—</span>)</span>
+        </div>
+      </div>
+
+      <div class="group">
         <div class="group-title">Issuer Call</div>
 
         <div class="ctrl-toggle">
@@ -795,6 +822,49 @@ function cbPrice(S, K, T, r, q, sigma, face, couponRate, spread) {
   return bf + ratio * bsCall(S, K, T, r, q, sigma);
 }
 
+// Bisection: spread such that bondFloor(face, coupon, T, r, spread) == target.
+// bondFloor is monotone decreasing in spread.
+function solveSpreadFromFloor(target, face, couponRate, T, r) {
+  let lo = -0.20, hi = 2.00;
+  const fLo = bondFloor(face, couponRate, T, r, lo);
+  const fHi = bondFloor(face, couponRate, T, r, hi);
+  if (target >= fLo) return lo;
+  if (target <= fHi) return hi;
+  for (let i = 0; i < 60; i++) {
+    const mid = 0.5 * (lo + hi);
+    if (bondFloor(face, couponRate, T, r, mid) > target) lo = mid; else hi = mid;
+  }
+  return 0.5 * (lo + hi);
+}
+
+// Bisection: stock price S such that bsCall(S, K, T, r, q, sigma) == target.
+// bsCall is monotone increasing in S; auto-expand upper bound.
+function solveStockFromCall(target, K, T, r, q, sigma) {
+  if (target <= 0) return 0;
+  let hi = Math.max(K, 1);
+  while (bsCall(hi, K, T, r, q, sigma) < target && hi < 1e8) hi *= 2;
+  let lo = 1e-6;
+  for (let i = 0; i < 60; i++) {
+    const mid = 0.5 * (lo + hi);
+    if (bsCall(mid, K, T, r, q, sigma) < target) lo = mid; else hi = mid;
+  }
+  return 0.5 * (lo + hi);
+}
+
+// Bisection: sigma such that bsCall(S, K, T, r, q, sigma) == target.
+// bsCall is monotone increasing in sigma.
+function solveVolFromCall(target, S, K, T, r, q) {
+  const lo0 = 1e-4, hi0 = 5.0;
+  if (target <= bsCall(S, K, T, r, q, lo0)) return lo0;
+  if (target >= bsCall(S, K, T, r, q, hi0)) return hi0;
+  let lo = lo0, hi = hi0;
+  for (let i = 0; i < 60; i++) {
+    const mid = 0.5 * (lo + hi);
+    if (bsCall(S, K, T, r, q, mid) < target) lo = mid; else hi = mid;
+  }
+  return 0.5 * (lo + hi);
+}
+
 // CRR binomial tree with Tsiveriotis-Fernandes decomposition.
 // Splits CB value into equity component E (discounted at r) and cash/bond
 // component B (discounted at r + spread). At each node the holder converts
@@ -907,7 +977,8 @@ const params = {
   S: 90, r: 0.03, q: 0.01,
   iv: 0.28, rv: 0.25, spread: 0.025,
   elapsed: 0,
-  callable: true, callPrice: 100, callDate: 3
+  callable: true, callPrice: 100, callDate: 3,
+  calibrate: false, targetConvPrem: 25, targetIvPrem: 10
 };
 
 const fmt = {
@@ -961,6 +1032,8 @@ bind('r_spread',  'v_spread',  'spread',  0.0001, v => Math.round(v).toString())
 bind('r_elapsed', 'v_elapsed', 'elapsed', 1,    v => Math.round(v).toString());
 bind('r_callprice', 'v_callprice', 'callPrice', 1, v => v.toFixed(2));
 bind('r_calldate',  'v_calldate',  'callDate',  1, v => v.toFixed(2));
+bind('r_targetconvprem', 'v_targetconvprem', 'targetConvPrem', 1, v => v.toFixed(2));
+bind('r_targetivprem',   'v_targetivprem',   'targetIvPrem',   1, v => v.toFixed(2));
 
 // Callable toggle
 const callableEl = document.getElementById('v_callable');
@@ -974,6 +1047,20 @@ callableEl.addEventListener('change', () => {
   refresh();
 });
 applyCallableUI();
+
+// Calibration toggle
+const calibrateEl = document.getElementById('v_calibrate');
+function applyCalibrateUI() {
+  document.getElementById('ctrl_targetconvprem').classList.toggle('disabled', !params.calibrate);
+  document.getElementById('ctrl_targetivprem').classList.toggle('disabled', !params.calibrate);
+  document.getElementById('calib_readout').style.opacity = params.calibrate ? '1' : '0.35';
+}
+calibrateEl.addEventListener('change', () => {
+  params.calibrate = calibrateEl.checked;
+  applyCalibrateUI();
+  refresh();
+});
+applyCalibrateUI();
 
 // ──────────────────────────────────────────────────────────────
 // CHARTS
@@ -1044,7 +1131,11 @@ const mainChart = makeChart('chart_main', [
   { label: 'Fair value @ σR', borderColor: '#8a6d4d', borderDash: [5, 3],
     data: [], borderWidth: 1.5, fill: false, pointRadius: 0, tension: 0.2 },
   { label: 'Current S', borderColor: '#d96868', backgroundColor: '#d96868',
-    data: [], borderWidth: 0, pointRadius: 6, pointHoverRadius: 8, showLine: false }
+    data: [], borderWidth: 0, pointRadius: 6, pointHoverRadius: 8, showLine: false },
+  { label: 'CB model (pre-cal)', borderColor: '#8a8a8a', borderDash: [3, 3],
+    data: [], borderWidth: 1.5, fill: false, pointRadius: 0, tension: 0.2 },
+  { label: 'Implied S*', borderColor: '#6ab87f', backgroundColor: '#6ab87f',
+    data: [], borderWidth: 0, pointRadius: 5, pointHoverRadius: 7, showLine: false }
 ], { yLabel: 'Price ($)' });
 
 const greeksChart = makeChart('chart_greeks', [
@@ -1120,26 +1211,50 @@ function refresh() {
   const Teff = Math.max(params.T - params.elapsed / 365, 0.001);
   document.getElementById('v_T_eff').textContent = Teff.toFixed(2) + 'y';
 
-  const { face, coupon, K, S, r, q, iv, rv, spread } = params;
+  const { face, coupon, K, S, r, q, rv } = params;
   const ratio = face / K;
+  let iv = params.iv;
+  let spread = params.spread;
+
+  // ── Market calibration: back-solve vol & spread from target premiums.
+  // The two premiums decouple: target IV-premium → bond floor → spread (1D),
+  // residual option value → vol (1D). Two independent bisections.
+  const ivOut = document.getElementById('o_implied_iv');
+  const spOut = document.getElementById('o_implied_spread');
+  if (params.calibrate) {
+    const parityCal = ratio * S;
+    const cbTarget  = parityCal * (1 + params.targetConvPrem / 100);
+    const bfTarget  = cbTarget / (1 + params.targetIvPrem / 100);
+    spread = solveSpreadFromFloor(bfTarget, face, coupon, Teff, r);
+    const callTarget = Math.max(cbTarget - bondFloor(face, coupon, Teff, r, spread), 0) / ratio;
+    iv = solveVolFromCall(callTarget, S, K, Teff, r, q);
+    ivOut.textContent = (iv * 100).toFixed(2) + '%';
+    spOut.textContent = Math.round(spread * 10000) + ' bps';
+  } else {
+    ivOut.textContent = '—';
+    spOut.textContent = '—';
+  }
 
   // ── Curve over stock range
   const sMin = Math.max(K * 0.2, 5);
   const sMax = K * 2.2;
   const N = 100;
-  const cbCurve = [], parityCurve = [], floorCurve = [], fairRvCurve = [];
+  const cbCurve = [], parityCurve = [], floorCurve = [], fairRvCurve = [], cbModelCurve = [];
   const deltaCurve = [], gammaCurve = [];
   const bf = bondFloor(face, coupon, Teff, r, spread);
+  const bfModel = bondFloor(face, coupon, Teff, r, params.spread);
 
   for (let i = 0; i <= N; i++) {
     const s = sMin + (sMax - sMin) * i / N;
     const cb = bf + ratio * bsCall(s, K, Teff, r, q, iv);
     const cbRv = bf + ratio * bsCall(s, K, Teff, r, q, rv);
+    const cbModel = bfModel + ratio * bsCall(s, K, Teff, r, q, params.iv);
     const parity = ratio * s;
     cbCurve.push({ x: s, y: cb });
     parityCurve.push({ x: s, y: parity });
     floorCurve.push({ x: s, y: bf });
     fairRvCurve.push({ x: s, y: cbRv });
+    cbModelCurve.push({ x: s, y: cbModel });
 
     // greeks
     const d = ratio * bsCallDelta(s, K, Teff, r, q, iv);    // shares per bond
@@ -1152,6 +1267,7 @@ function refresh() {
   mainChart.data.datasets[1].data = parityCurve;
   mainChart.data.datasets[2].data = floorCurve;
   mainChart.data.datasets[3].data = fairRvCurve;
+  mainChart.data.datasets[5].data = params.calibrate ? cbModelCurve : [];
 
   // ── Spot valuation
   const callValue = bsCall(S, K, Teff, r, q, iv);
@@ -1173,6 +1289,39 @@ function refresh() {
 
   // marker at current S
   mainChart.data.datasets[4].data = [{ x: S, y: cb }];
+
+  // ── Calibration adjustments + implied stock S*
+  const adjCb = document.getElementById('o_adj_cb');
+  const adjOpt = document.getElementById('o_adj_opt');
+  const adjBf  = document.getElementById('o_adj_bf');
+  const impS   = document.getElementById('o_implied_s');
+  if (params.calibrate) {
+    const modelCallSpot = bsCall(S, K, Teff, r, q, params.iv);
+    const calCallSpot   = bsCall(S, K, Teff, r, q, iv);
+    const modelCbSpot   = bfModel + ratio * modelCallSpot;
+    const dCb  = cb - modelCbSpot;
+    const dOpt = ratio * (calCallSpot - modelCallSpot);
+    const dBf  = bf - bfModel;
+
+    // Implied S*: stock that would reproduce calibrated CB price under user's
+    // pre-cal model (params.iv, params.spread). Bond floor is S-independent.
+    const callTgt = Math.max(cb - bfModel, 0) / ratio;
+    const sStar = solveStockFromCall(callTgt, K, Teff, r, q, params.iv);
+
+    adjCb.textContent  = (dCb  >= 0 ? '+$' : '-$') + Math.abs(dCb).toFixed(3);
+    adjOpt.textContent = (dOpt >= 0 ? '+'  : '-')  + '$' + Math.abs(dOpt).toFixed(3);
+    adjBf.textContent  = (dBf  >= 0 ? '+'  : '-')  + '$' + Math.abs(dBf).toFixed(3);
+    impS.textContent   = '$' + sStar.toFixed(2) + '  (Δ ' + (sStar - S >= 0 ? '+' : '') + (sStar - S).toFixed(2) + ')';
+
+    mainChart.data.datasets[6].data = [{ x: sStar, y: cb }];
+  } else {
+    adjCb.textContent = '—';
+    adjOpt.textContent = '—';
+    adjBf.textContent = '—';
+    impS.textContent = '—';
+    mainChart.data.datasets[6].data = [];
+  }
+
   mainChart.update('none');
 
   greeksChart.data.datasets[0].data = deltaCurve;
