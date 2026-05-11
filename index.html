@@ -649,7 +649,7 @@
         <div class="stat">
           <div class="stat-label">P(default by T)</div>
           <div class="stat-value" id="o_p_def">—</div>
-          <div class="stat-sub">1 − e<sup>−λT</sup> · λ = s/(1−RR), RR=40%</div>
+          <div class="stat-sub">λ = s/(1−RR) · RR=<span id="o_RR_used">40</span>%</div>
         </div>
         <div class="stat">
           <div class="stat-label">P(convert ∩ survive)</div>
@@ -1494,6 +1494,7 @@ function refresh() {
   document.getElementById('o_p_conv').textContent     = (pConv * 100).toFixed(1) + '%';
   document.getElementById('o_p_def').textContent      = (pDef  * 100).toFixed(2) + '%';
   document.getElementById('o_p_conv_net').textContent = (pConv * pSurv * 100).toFixed(1) + '%';
+  document.getElementById('o_RR_used').textContent    = Math.round(params.RR * 100);
   // Vega/theta in bps of par
   const vegaBps  = vega    / face * 10000;
   const thetaBps = thetaDay / face * 10000;
