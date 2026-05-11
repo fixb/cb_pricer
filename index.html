@@ -536,24 +536,24 @@
       <!-- Greeks -->
       <div class="stats">
         <div class="stat">
-          <div class="stat-label">Delta</div>
+          <div class="stat-label">Delta <span style="opacity:0.45; font-weight:400;">(BS)</span></div>
           <div class="stat-value" id="o_delta">—</div>
-          <div class="stat-sub">equity sensitivity</div>
+          <div class="stat-sub">Bin: <span id="o_delta_bin">—</span></div>
         </div>
         <div class="stat">
-          <div class="stat-label">Gamma</div>
+          <div class="stat-label">Gamma <span style="opacity:0.45; font-weight:400;">(BS)</span></div>
           <div class="stat-value" id="o_gamma">—</div>
-          <div class="stat-sub">Δdelta per 1% in S</div>
+          <div class="stat-sub">Bin: <span id="o_gamma_bin">—</span></div>
         </div>
         <div class="stat">
-          <div class="stat-label">Vega</div>
+          <div class="stat-label">Vega <span style="opacity:0.45; font-weight:400;">(BS)</span></div>
           <div class="stat-value" id="o_vega">—</div>
-          <div class="stat-sub">bps of par per 1 vol pt</div>
+          <div class="stat-sub">Bin: <span id="o_vega_bin">—</span></div>
         </div>
         <div class="stat">
-          <div class="stat-label">Theta</div>
+          <div class="stat-label">Theta <span style="opacity:0.45; font-weight:400;">(BS)</span></div>
           <div class="stat-value" id="o_theta">—</div>
-          <div class="stat-sub">bps of par per day</div>
+          <div class="stat-sub">Bin: <span id="o_theta_bin">—</span></div>
         </div>
       </div>
 
@@ -1406,6 +1406,30 @@ function refresh() {
   const earlyEl = document.getElementById('o_early_prem');
   earlyEl.textContent = (earlyPrem >= 0 ? '+' : '') + '$' + earlyPrem.toFixed(3);
   earlyEl.style.color = earlyPrem >= 0.001 ? 'var(--bull)' : 'var(--text)';
+
+  // ── Binomial Greeks via finite differences on the same TF lattice
+  const binPrice = (S_, T_, sig_) =>
+    (params.callable
+      ? cbPriceBinomialTF(S_, K, T_, r, q, sig_, face, coupon, spread, 200, callOpts)
+      : cbPriceBinomialTF(S_, K, T_, r, q, sig_, face, coupon, spread, 200)
+    ).price;
+  const epsS = Math.max(0.01 * S, 0.5);
+  const epsV = 0.005;             // 50 bps vol
+  const epsT = 1 / 365;
+  const cbBinUp = binPrice(S + epsS, Teff, iv);
+  const cbBinDn = binPrice(S - epsS, Teff, iv);
+  const cbBinVup = binPrice(S, Teff, iv + epsV);
+  const cbBinTdn = binPrice(S, Math.max(Teff - epsT, 1e-4), iv);
+  const deltaBin = (cbBinUp - cbBinDn) / (2 * epsS);
+  const gammaBin = (cbBinUp - 2 * bin.price + cbBinDn) / (epsS * epsS);
+  const vegaBin  = (cbBinVup - bin.price) / epsV / 100;     // $ per 1 vol pt
+  const thetaDayBin = (cbBinTdn - bin.price);                // $ per day (1-day forward diff)
+
+  document.getElementById('o_delta_bin').textContent = (deltaBin * 100).toFixed(1) + '%';
+  document.getElementById('o_gamma_bin').textContent = (gammaBin * S).toFixed(2) + '%';
+  document.getElementById('o_vega_bin').textContent  = (vegaBin / face * 10000).toFixed(1) + ' bps';
+  const tBinBps = thetaDayBin / face * 10000;
+  document.getElementById('o_theta_bin').textContent = (tBinBps >= 0 ? '+' : '') + tBinBps.toFixed(1) + ' bps';
 
   // Issuer call cost = value the call extracts from the holder vs uncallable bond
   const callCost = binNoCall.price - bin.price;
