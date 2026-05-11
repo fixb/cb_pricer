@@ -1256,11 +1256,13 @@ function refresh() {
     fairRvCurve.push({ x: s, y: cbRv });
     cbModelCurve.push({ x: s, y: cbModel });
 
-    // greeks
-    const d = ratio * bsCallDelta(s, K, Teff, r, q, iv);    // shares per bond
-    const g = ratio * bsCallGamma(s, K, Teff, r, q, iv);    // ∂²CB/∂S²
-    deltaCurve.push({ x: s, y: d * 100 });  // expressed as %
-    gammaCurve.push({ x: s, y: g });
+    // Greeks displayed as "% of full conversion" — N(d1) and ΔN(d1) per 1% S.
+    // Bloomberg/FTSE convention: Delta% = option-level call delta, not
+    // shares-per-bond × 100. Drops the ratio multiplier.
+    const dCall = bsCallDelta(s, K, Teff, r, q, iv);
+    const gCall = bsCallGamma(s, K, Teff, r, q, iv);
+    deltaCurve.push({ x: s, y: dCall * 100 });
+    gammaCurve.push({ x: s, y: gCall * s });
   }
 
   mainChart.data.datasets[0].data = cbCurve;
@@ -1276,9 +1278,12 @@ function refresh() {
   const premium = (cb / parity - 1) * 100;
   const floorPremium = (cb / bf - 1) * 100;
 
-  // delta as shares per bond, expressed as equivalent number of shares × 1
-  const delta = ratio * bsCallDelta(S, K, Teff, r, q, iv);
-  const gamma = ratio * bsCallGamma(S, K, Teff, r, q, iv);
+  // Option-level Greeks (used for display, % of full conversion);
+  // bond-level Greeks (×ratio) are used for $ P&L sizing below.
+  const deltaCall = bsCallDelta(S, K, Teff, r, q, iv);
+  const gammaCall = bsCallGamma(S, K, Teff, r, q, iv);
+  const delta = ratio * deltaCall;
+  const gamma = ratio * gammaCall;
   const vega = ratio * bsCallVega(S, K, Teff, r, q, iv) / 100;     // per 1 vol pt (1%)
   const thetaY = ratio * bsCallTheta(S, K, Teff, r, q, iv);
   // Add bond floor accretion as part of theta (positive carry)
@@ -1340,10 +1345,10 @@ function refresh() {
   document.getElementById('o_ytm').textContent = (ytm * 100).toFixed(2) + '%';
   document.getElementById('o_yieldp').textContent = 'pickup vs RF: ' + ((ytm - r) * 10000).toFixed(0) + ' bps';
 
-  // Delta as equity sensitivity %, gamma as Δdelta% per 1% S move:
-  //   Δdelta_shares ≈ Γ × S × 0.01, expressed as % → Γ × S
-  document.getElementById('o_delta').textContent = (delta * 100).toFixed(1) + '%';
-  document.getElementById('o_gamma').textContent = (gamma * S).toFixed(2) + '%';
+  // Delta % = N(d1) (Bloomberg/FTSE "% of full conversion" convention).
+  // Gamma % = ΔN(d1) per 1% S = call_gamma × S.
+  document.getElementById('o_delta').textContent = (deltaCall * 100).toFixed(1) + '%';
+  document.getElementById('o_gamma').textContent = (gammaCall * S).toFixed(2) + '%';
   // Vega/theta in bps of par
   const vegaBps  = vega    / face * 10000;
   const thetaBps = thetaDay / face * 10000;
@@ -1420,8 +1425,13 @@ function refresh() {
   const cbBinDn = binPrice(S - epsS, Teff, iv);
   const cbBinVup = binPrice(S, Teff, iv + epsV);
   const cbBinTdn = binPrice(S, Math.max(Teff - epsT, 1e-4), iv);
-  const deltaBin = (cbBinUp - cbBinDn) / (2 * epsS);
-  const gammaBin = (cbBinUp - 2 * bin.price + cbBinDn) / (epsS * epsS);
+  // FD on the CB price gives ∂CB/∂S (= ratio × call_delta in shares/bond) and
+  // ∂²CB/∂S². Divide by ratio to express as option-level Greeks (% of full
+  // conversion) for display, matching the BS convention above.
+  const deltaBinBond = (cbBinUp - cbBinDn) / (2 * epsS);
+  const gammaBinBond = (cbBinUp - 2 * bin.price + cbBinDn) / (epsS * epsS);
+  const deltaBin = deltaBinBond / ratio;
+  const gammaBin = gammaBinBond / ratio;
   const vegaBin  = (cbBinVup - bin.price) / epsV / 100;     // $ per 1 vol pt
   const thetaDayBin = (cbBinTdn - bin.price);                // $ per day (1-day forward diff)
 
