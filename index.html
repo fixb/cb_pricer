@@ -447,6 +447,11 @@
           <div class="ctrl-row"><span class="ctrl-label">Credit spread <span class="unit">(bps)</span></span><input type="number" class="ctrl-value" id="v_spread" value="250" step="any"></div>
           <input type="range" id="r_spread" min="0" max="5000" step="10" value="250">
         </div>
+
+        <div class="ctrl">
+          <div class="ctrl-row"><span class="ctrl-label">Recovery rate <span class="unit">(%)</span></span><input type="number" class="ctrl-value" id="v_RR" value="40" step="any"></div>
+          <input type="range" id="r_RR" min="0" max="80" step="5" value="40">
+        </div>
       </div>
 
       <div class="group">
@@ -554,6 +559,30 @@
           <div class="stat-label">Theta <span style="opacity:0.45; font-weight:400;">(BS)</span></div>
           <div class="stat-value" id="o_theta">—</div>
           <div class="stat-sub">Bin: <span id="o_theta_bin">—</span></div>
+        </div>
+      </div>
+
+      <!-- Probabilities -->
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">P(conversion)</div>
+          <div class="stat-value" id="o_p_conv">—</div>
+          <div class="stat-sub">N(d₂) · risk-neutral, no default</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">P(default by T)</div>
+          <div class="stat-value" id="o_p_def">—</div>
+          <div class="stat-sub">1 − e<sup>−λT</sup> · λ = s/(1−RR), RR=40%</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">P(convert ∩ survive)</div>
+          <div class="stat-value" id="o_p_conv_net">—</div>
+          <div class="stat-sub">N(d₂) × e<sup>−λT</sup></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">P(recall)</div>
+          <div class="stat-value" id="o_p_recall">—</div>
+          <div class="stat-sub">issuer call · first-hit on tree</div>
         </div>
       </div>
 
@@ -882,8 +911,8 @@ function cbPriceBinomialTF(S, K, T, r, q, sigma, face, couponRate, spread, steps
   if (T <= 1e-9) {
     const conv = ratio * S;
     return conv >= face
-      ? { price: conv, equity: conv, bond: 0 }
-      : { price: face, equity: 0, bond: face };
+      ? { price: conv, equity: conv, bond: 0, pRecall: 0 }
+      : { price: face, equity: 0, bond: face, pRecall: 0 };
   }
   const dt = T / steps;
   const sig = Math.max(sigma, 1e-6);
@@ -903,6 +932,10 @@ function cbPriceBinomialTF(S, K, T, r, q, sigma, face, couponRate, spread, steps
 
   const E = new Float64Array(steps + 1);
   const B = new Float64Array(steps + 1);
+
+  // Track issuer-call events for P(recall); only allocate when callable.
+  const called = callOn ? new Array(steps + 1) : null;
+  if (callOn) for (let i = 0; i <= steps; i++) called[i] = new Uint8Array(i + 1);
 
   // Terminal payoffs (call doesn't apply at maturity — bond redeems or converts)
   for (let j = 0; j <= steps; j++) {
@@ -930,6 +963,7 @@ function cbPriceBinomialTF(S, K, T, r, q, sigma, face, couponRate, spread, steps
         const Vh = En + Bn;
         const calledValue = Math.max(callPrice, conv);
         if (Vh > calledValue + 1e-9) {
+          called[i][j] = 1;
           if (conv > callPrice) { En = conv; Bn = 0; }
           else                  { En = 0;    Bn = callPrice; }
         }
@@ -938,7 +972,28 @@ function cbPriceBinomialTF(S, K, T, r, q, sigma, face, couponRate, spread, steps
     }
   }
 
-  return { price: E[0] + B[0], equity: E[0], bond: B[0] };
+  // Forward pass: probability of first-hitting a called node before maturity.
+  // Mass that reaches a called node is absorbed and counted toward pRecall.
+  let pRecall = 0;
+  if (callOn) {
+    let probs = new Float64Array(1);
+    probs[0] = 1;
+    for (let i = 0; i < steps; i++) {
+      const next = new Float64Array(i + 2);
+      const row = called[i];
+      for (let j = 0; j <= i; j++) {
+        if (row[j]) {
+          pRecall += probs[j];
+        } else {
+          next[j]     += p       * probs[j];
+          next[j + 1] += (1 - p) * probs[j];
+        }
+      }
+      probs = next;
+    }
+  }
+
+  return { price: E[0] + B[0], equity: E[0], bond: B[0], pRecall };
 }
 
 // CB Yield to Maturity (Newton's method)
@@ -975,7 +1030,7 @@ function cbYTM(price, face, couponRate, T) {
 const params = {
   face: 100, coupon: 0.005, T: 5, K: 100,
   S: 90, r: 0.03, q: 0.01,
-  iv: 0.28, rv: 0.25, spread: 0.025,
+  iv: 0.28, rv: 0.25, spread: 0.025, RR: 0.40,
   elapsed: 0,
   callable: true, callPrice: 100, callDate: 3,
   calibrate: false, targetConvPrem: 25, targetIvPrem: 10
@@ -1029,6 +1084,7 @@ bind('r_q',       'v_q',       'q',       0.01, v => v.toFixed(2));
 bind('r_iv',      'v_iv',      'iv',      0.01, v => v.toFixed(1));
 bind('r_rv',      'v_rv',      'rv',      0.01, v => v.toFixed(1));
 bind('r_spread',  'v_spread',  'spread',  0.0001, v => Math.round(v).toString());
+bind('r_RR',      'v_RR',      'RR',      0.01,   v => Math.round(v).toString());
 bind('r_elapsed', 'v_elapsed', 'elapsed', 1,    v => Math.round(v).toString());
 bind('r_callprice', 'v_callprice', 'callPrice', 1, v => v.toFixed(2));
 bind('r_calldate',  'v_calldate',  'callDate',  1, v => v.toFixed(2));
@@ -1349,6 +1405,18 @@ function refresh() {
   // Gamma % = ΔN(d1) per 1% S = call_gamma × S.
   document.getElementById('o_delta').textContent = (deltaCall * 100).toFixed(1) + '%';
   document.getElementById('o_gamma').textContent = (gammaCall * S).toFixed(2) + '%';
+
+  // Probabilities: risk-neutral P(S_T > K) = N(d2); default intensity from
+  // credit spread under reduced-form model with user-set recovery rate.
+  const sigT = Math.max(iv * Math.sqrt(Teff), 1e-9);
+  const d2_  = (Math.log(S / K) + (r - q - 0.5 * iv * iv) * Teff) / sigT;
+  const pConv = normCDF(d2_);
+  const lam   = spread / Math.max(1 - params.RR, 1e-6);
+  const pSurv = Math.exp(-lam * Teff);
+  const pDef  = 1 - pSurv;
+  document.getElementById('o_p_conv').textContent     = (pConv * 100).toFixed(1) + '%';
+  document.getElementById('o_p_def').textContent      = (pDef  * 100).toFixed(2) + '%';
+  document.getElementById('o_p_conv_net').textContent = (pConv * pSurv * 100).toFixed(1) + '%';
   // Vega/theta in bps of par
   const vegaBps  = vega    / face * 10000;
   const thetaBps = thetaDay / face * 10000;
@@ -1403,6 +1471,9 @@ function refresh() {
 
   document.getElementById('o_cb_bin').textContent = fmt.$(bin.price);
   document.getElementById('o_cb_bin_pct').textContent = (bin.price / face * 100).toFixed(2) + ' of par';
+  document.getElementById('o_p_recall').textContent = params.callable
+    ? (bin.pRecall * 100).toFixed(1) + '%'
+    : '—';
   document.getElementById('o_eq_comp').textContent = fmt.$(bin.equity);
   document.getElementById('o_eq_pct').textContent = (bin.equity / bin.price * 100).toFixed(1) + '% of total';
   document.getElementById('o_bd_comp').textContent = fmt.$(bin.bond);
