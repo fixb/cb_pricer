@@ -1740,7 +1740,8 @@ function refreshTakeover(cbMark, Teff) {
     const ids = {
       face:'v_face', coupon:'v_coupon', T:'v_T', T_date:'v_T_date',
       K:'v_K', S:'v_S', r:'v_r', q:'v_q', iv:'v_iv', rv:'v_rv',
-      spread:'v_spread', RR:'v_RR'
+      spread:'v_spread', RR:'v_RR',
+      targetConvPrem:'v_targetconvprem', targetIvPrem:'v_targetivprem'
     };
     let keys = Object.keys(ids);
     if (qs.has('T_date')) keys = keys.filter(k => k !== 'T'); // prefer date over years
