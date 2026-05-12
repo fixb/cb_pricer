@@ -1723,6 +1723,40 @@ function refreshTakeover(cbMark, Teff) {
   takeoverChart.update('none');
 }
 
+// ──────────────────────────────────────────────────────────────
+// Load values from URL query params (e.g. opened from CB index dashboard)
+// Supported: name, face, coupon, T, T_date, K, S, r, q, iv, rv, spread, RR
+// ──────────────────────────────────────────────────────────────
+(function loadFromURL(){
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    if (!qs.toString()) return;
+    const name = qs.get('name');
+    if (name) {
+      document.title = name + ' — CB Pricer';
+      const h1 = document.querySelector('h1, header h1, .title');
+      if (h1 && h1.textContent) h1.dataset.original = h1.textContent;
+    }
+    const ids = {
+      face:'v_face', coupon:'v_coupon', T:'v_T', T_date:'v_T_date',
+      K:'v_K', S:'v_S', r:'v_r', q:'v_q', iv:'v_iv', rv:'v_rv',
+      spread:'v_spread', RR:'v_RR'
+    };
+    let keys = Object.keys(ids);
+    if (qs.has('T_date')) keys = keys.filter(k => k !== 'T'); // prefer date over years
+    keys.forEach(k => {
+      const v = qs.get(k);
+      if (v == null || v === '') return;
+      const el = document.getElementById(ids[k]);
+      if (!el) return;
+      el.value = v;
+      el.dispatchEvent(new Event('change'));
+    });
+  } catch (e) {
+    console.warn('CB pricer URL params load error:', e);
+  }
+})();
+
 refresh();
 </script>
 </body>
