@@ -221,6 +221,20 @@
   }
   .stat-sub.bull { color: var(--bull); }
   .stat-sub.bear { color: var(--bear); }
+  .stat-ref {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-mute);
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px dashed rgba(255,255,255,0.08);
+    line-height: 1.55;
+    display: none;
+  }
+  .stat-ref.on { display: block; }
+  .stat-ref .lbl { opacity: 0.65; }
+  .stat-ref .pos { color: var(--bull); }
+  .stat-ref .neg { color: var(--bear); }
 
   .chart-card {
     background: var(--panel);
@@ -615,16 +629,19 @@
           <div class="stat-label">CB Price</div>
           <div class="stat-value amber" id="o_cb">—</div>
           <div class="stat-sub" id="o_cb_pct">— of par</div>
+          <div class="stat-ref" id="o_cb_ref"></div>
         </div>
         <div class="stat">
           <div class="stat-label">Parity</div>
           <div class="stat-value" id="o_parity">—</div>
           <div class="stat-sub" id="o_premium">prem —</div>
+          <div class="stat-ref" id="o_parity_ref"></div>
         </div>
         <div class="stat">
           <div class="stat-label">Bond Floor</div>
           <div class="stat-value" id="o_floor">—</div>
           <div class="stat-sub" id="o_floor_premium">prem —</div>
+          <div class="stat-ref" id="o_floor_ref"></div>
         </div>
         <div class="stat">
           <div class="stat-label">Yield to Maturity</div>
@@ -1131,6 +1148,9 @@ const params = {
   calibrate: false, targetConvPrem: 25, targetIvPrem: 10
 };
 
+// FTSE benchmark values (populated from URL params if dashboard deep-links)
+const FTSE_REF = { cb: null, parity: null, theo: null, bf: null };
+
 const fmt = {
   num: (x, d=2) => isFinite(x) ? x.toFixed(d) : '—',
   pct: (x, d=1) => (x * 100).toFixed(d) + '%',
@@ -1534,6 +1554,31 @@ function refresh() {
   document.getElementById('o_parity').textContent = fmt.$(parity);
   document.getElementById('o_premium').textContent = 'prem ' + (premium >= 0 ? '+' : '') + premium.toFixed(1) + '%';
   document.getElementById('o_floor').textContent  = fmt.$(bf);
+
+  // ── FTSE benchmark comparison (only when deep-linked from dashboard)
+  function deltaHtml(model, ref, d=2) {
+    const diff = model - ref;
+    const sign = diff >= 0 ? '+' : '';
+    const cls  = diff >= 0 ? 'pos' : 'neg';
+    const pct  = ref !== 0 ? (diff / ref * 100) : 0;
+    return ' <span class="' + cls + '">(Δ ' + sign + diff.toFixed(d) + ' / ' + sign + pct.toFixed(2) + '%)</span>';
+  }
+  function setRef(elId, lines) {
+    const el = document.getElementById(elId);
+    if (!lines.length) { el.classList.remove('on'); el.innerHTML=''; return; }
+    el.innerHTML = lines.join('<br>');
+    el.classList.add('on');
+  }
+  const cbLines = [];
+  if (FTSE_REF.theo != null) cbLines.push('<span class="lbl">FTSE theo:</span> ' + FTSE_REF.theo.toFixed(2) + deltaHtml(cb, FTSE_REF.theo));
+  if (FTSE_REF.cb != null)   cbLines.push('<span class="lbl">FTSE mkt:</span>&nbsp; ' + FTSE_REF.cb.toFixed(2)   + deltaHtml(cb, FTSE_REF.cb));
+  setRef('o_cb_ref', cbLines);
+  const parLines = [];
+  if (FTSE_REF.parity != null) parLines.push('<span class="lbl">FTSE:</span> ' + FTSE_REF.parity.toFixed(2) + deltaHtml(parity, FTSE_REF.parity));
+  setRef('o_parity_ref', parLines);
+  const bfLines = [];
+  if (FTSE_REF.bf != null) bfLines.push('<span class="lbl">FTSE inv:</span> ' + FTSE_REF.bf.toFixed(2) + deltaHtml(bf, FTSE_REF.bf));
+  setRef('o_floor_ref', bfLines);
   document.getElementById('o_floor_premium').textContent = 'prem ' + (floorPremium >= 0 ? '+' : '') + floorPremium.toFixed(1) + '%';
 
   const ytm = cbYTM(cb, face, coupon, Teff);
@@ -1731,6 +1776,13 @@ function refreshTakeover(cbMark, Teff) {
   try {
     const qs = new URLSearchParams(window.location.search);
     if (!qs.toString()) return;
+    // FTSE benchmark values for comparison
+    [['ftse_cb','cb'],['ftse_parity','parity'],['ftse_theo','theo'],['ftse_bf','bf']].forEach(([qk,fk]) => {
+      const v = qs.get(qk);
+      if (v == null || v === '') return;
+      const n = parseFloat(v);
+      if (!isNaN(n)) FTSE_REF[fk] = n;
+    });
     const name = qs.get('name');
     if (name) {
       document.title = name + ' — CB Pricer';
