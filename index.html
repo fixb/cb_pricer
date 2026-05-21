@@ -478,7 +478,7 @@
 <div class="app">
   <header>
     <div>
-      <div class="brand"><span class="accent">CB</span> Pricer</div>
+      <div class="brand"><span class="accent">CB</span> Pricer<span id="cb_name_label" style="margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border, rgba(255,255,255,0.12)); font-weight: 400; font-size: 0.85em; color: var(--text-mute); display: none;"></span></div>
       <div style="font-size: 11px; color: var(--text-mute); margin-top: 2px; font-style: italic; font-family: 'Instrument Serif', serif;">Convertible bond visualization · Bond floor + equity option decomposition</div>
     </div>
     <div class="subtitle">v1.1 · Black-Scholes + Binomial (TF)</div>
@@ -1794,8 +1794,11 @@ function refreshTakeover(cbMark, Teff) {
     const name = qs.get('name');
     if (name) {
       document.title = name + ' — CB Pricer';
-      const h1 = document.querySelector('h1, header h1, .title');
-      if (h1 && h1.textContent) h1.dataset.original = h1.textContent;
+      const label = document.getElementById('cb_name_label');
+      if (label) {
+        label.textContent = name;
+        label.style.display = 'inline';
+      }
     }
     const ids = {
       face:'v_face', coupon:'v_coupon', T:'v_T', T_date:'v_T_date',
