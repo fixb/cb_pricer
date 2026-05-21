@@ -320,6 +320,53 @@
     font-style: italic;
   }
 
+  .docs-section {
+    margin-top: 8px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: 4px;
+  }
+  .docs-section > .docs-title {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-mute);
+    margin-bottom: 14px;
+  }
+  .docs-category { margin-bottom: 14px; }
+  .docs-category:last-child { margin-bottom: 0; }
+  .docs-category-title {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--amber-dim);
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .docs-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .docs-list a {
+    color: var(--amber);
+    text-decoration: none;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .docs-list a:hover { color: var(--cb); text-decoration: underline; }
+  .docs-list .doc-meta {
+    color: var(--text-dim);
+    font-size: 10px;
+    font-style: italic;
+  }
+
   .takeover-controls {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -859,6 +906,112 @@
 
         <div class="chart-container">
           <canvas id="chart_takeover"></canvas>
+        </div>
+      </div>
+
+      <div class="docs-section">
+        <div class="docs-title">References &amp; Documentation</div>
+
+        <div class="docs-category">
+          <div class="docs-category-title">Primers &amp; Pedagogy</div>
+          <ul class="docs-list">
+            <li>
+              <a href="docs/bg-teach-in-cb-2015.pdf" target="_blank" rel="noopener">
+                Convertible Bonds — Teach-In
+                <span class="doc-meta">Boussard &amp; Gavaudan · Alexi Ravel · Aug 2015</span>
+              </a>
+            </li>
+            <li>
+              <a href="docs/cb-investors-guide-deutsche-bank-2001.pdf" target="_blank" rel="noopener">
+                Convertible Securities — An Investors' Guide
+                <span class="doc-meta">Deutsche Bank · Howard &amp; O'Connor · Oct 2001</span>
+              </a>
+            </li>
+            <li>
+              <a href="docs/cb-guide-citigroup-2006.pdf" target="_blank" rel="noopener">
+                Convertible Bonds — A Guide
+                <span class="doc-meta">Citigroup · Christopher Davenport · Jan 2006</span>
+              </a>
+            </li>
+            <li>
+              <a href="docs/cb-curious-case-barclays-2013.pdf" target="_blank" rel="noopener">
+                The Curious Case of Converts
+                <span class="doc-meta">Barclays Capital Solutions · Nov 2013</span>
+              </a>
+            </li>
+            <li>
+              <a href="docs/cb-explain-berenberg-2014.pdf" target="_blank" rel="noopener">
+                Catching the Sweet Spot with Convertible Bonds
+                <span class="doc-meta">Berenberg · Patrick Weber · Jun 2014</span>
+              </a>
+            </li>
+            <li>
+              <a href="docs/cb-begin-note-2014.pdf" target="_blank" rel="noopener">
+                BEGIN — CB Note
+                <span class="doc-meta">Apr 2014</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="docs-category">
+          <div class="docs-category-title">Terms &amp; Structures</div>
+          <ul class="docs-list">
+            <li>
+              <a href="docs/cb-issuers-guide-mayer-brown-2013.pdf" target="_blank" rel="noopener">
+                Convertible Bonds — An Issuer's Guide (European Edition)
+                <span class="doc-meta">Mayer Brown · Oct 2013</span>
+              </a>
+            </li>
+            <li>
+              <a href="docs/cb-takeover-clauses-bnp-2005.pdf" target="_blank" rel="noopener">
+                Takeover Protection Clauses — Directory
+                <span class="doc-meta">BNP Paribas · Sep 2005</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="docs-category">
+          <div class="docs-category-title">Modelling &amp; Valuation</div>
+          <ul class="docs-list">
+            <li>
+              <a href="docs/ratchet-valuation.pdf" target="_blank" rel="noopener">
+                Ratchet Valuation
+                <span class="doc-meta">Methodology note</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="docs-category">
+          <div class="docs-category-title">Academic Papers</div>
+          <ul class="docs-list">
+            <li>
+              <a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1540-6261.1977.tb03364.x" target="_blank" rel="noopener">
+                Convertible Bonds: Valuation and Optimal Strategies for Call and Conversion
+                <span class="doc-meta">Brennan &amp; Schwartz · Journal of Finance · 1977 · founding paper</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://www.semanticscholar.org/paper/Valuing-Convertible-Bonds-with-Credit-Risk-Tsiveriotis-Fernandes/fbeac5c231c4545d577e83a85b7f19aff4bcb8f8" target="_blank" rel="noopener">
+                Valuing Convertible Bonds with Credit Risk
+                <span class="doc-meta">Tsiveriotis &amp; Fernandes · J. Fixed Income · 1998 · binomial TF split used in this pricer</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://cs.uwaterloo.ca/~paforsyt/convert.pdf" target="_blank" rel="noopener">
+                The Valuation of Convertible Bonds with Credit Risk
+                <span class="doc-meta">Ayache, Forsyth &amp; Vetzal · J. Derivatives · 2003 · PDE / default extension</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=355308" target="_blank" rel="noopener">
+                Calibration and Implementation of Convertible Bond Models
+                <span class="doc-meta">Andersen &amp; Buffum · J. Computational Finance · 2003 · calibration biases</span>
+              </a>
+            </li>
+          </ul>
         </div>
       </div>
 
