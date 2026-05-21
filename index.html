@@ -671,7 +671,7 @@
     <section class="canvas-wrap">
 
       <!-- Live valuation -->
-      <div class="stats">
+      <div class="stats stats-5col">
         <div class="stat">
           <div class="stat-label">CB Price</div>
           <div class="stat-value amber" id="o_cb">—</div>
@@ -694,6 +694,11 @@
           <div class="stat-label">Yield to Maturity</div>
           <div class="stat-value" id="o_ytm">—</div>
           <div class="stat-sub" id="o_yieldp">yield pickup —</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Downside <span style="opacity:0.45; font-weight:400;">(no default)</span></div>
+          <div class="stat-value" id="o_downside">—</div>
+          <div class="stat-sub" id="o_downside_abs">w/ default: —</div>
         </div>
       </div>
 
@@ -1745,6 +1750,18 @@ function refresh() {
   const ytm = cbYTM(cb, face, coupon, Teff);
   document.getElementById('o_ytm').textContent = (ytm * 100).toFixed(2) + '%';
   document.getElementById('o_yieldp').textContent = 'pickup vs RF: ' + ((ytm - r) * 10000).toFixed(0) + ' bps';
+
+  // Downside / max loss: market view (stock → 0, no default) loses CB − Bond Floor.
+  // Absolute max loss (default day-1) loses CB − recovery × face.
+  const downsideAbs = cb - bf;
+  const downsidePct = cb > 0 ? downsideAbs / cb : 0;
+  const maxLossAbs  = cb - params.RR * face;
+  const maxLossPct  = cb > 0 ? maxLossAbs / cb : 0;
+  const dsEl = document.getElementById('o_downside');
+  dsEl.textContent = '−' + (downsidePct * 100).toFixed(1) + '%';
+  dsEl.className = 'stat-value ' + (downsidePct > 0 ? 'bear' : '');
+  document.getElementById('o_downside_abs').textContent =
+    'w/ default: −' + (maxLossPct * 100).toFixed(1) + '% (RR ' + Math.round(params.RR * 100) + '%)';
 
   // Delta % = N(d1) (Bloomberg/FTSE "% of full conversion" convention).
   // Gamma % = ΔN(d1) per 1% S = call_gamma × S.
