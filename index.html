@@ -1357,7 +1357,13 @@ const greeksChart = makeChart('chart_greeks', [
   { label: 'Delta', borderColor: '#6ab87f', data: [], borderWidth: 2, fill: false,
     pointRadius: 0, tension: 0.2, yAxisID: 'y' },
   { label: 'Gamma', borderColor: '#d4a574', data: [], borderWidth: 2, fill: false,
-    pointRadius: 0, tension: 0.2, yAxisID: 'y1' }
+    pointRadius: 0, tension: 0.2, yAxisID: 'y1' },
+  { label: 'Current S (Δ)', borderColor: '#d96868', backgroundColor: '#d96868',
+    data: [], borderWidth: 0, pointRadius: 5, pointHoverRadius: 7,
+    showLine: false, yAxisID: 'y' },
+  { label: 'Current S (Γ)', borderColor: '#d96868', backgroundColor: '#d96868',
+    data: [], borderWidth: 0, pointRadius: 5, pointHoverRadius: 7,
+    showLine: false, yAxisID: 'y1' }
 ], {
   scales: {
     y:  { position: 'left',  grid: { color: grid }, ticks: { color: tickColor },
@@ -1546,6 +1552,8 @@ function refresh() {
 
   greeksChart.data.datasets[0].data = deltaCurve;
   greeksChart.data.datasets[1].data = gammaCurve;
+  greeksChart.data.datasets[2].data = [{ x: S, y: deltaCall * 100 }];
+  greeksChart.data.datasets[3].data = [{ x: S, y: gammaCall * S }];
   greeksChart.update('none');
 
   // ── Output panel
