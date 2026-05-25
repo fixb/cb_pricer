@@ -598,6 +598,9 @@
         <div class="ctrl">
           <div class="ctrl-row"><span class="ctrl-label">Credit spread <span class="unit">(bps)</span></span><input type="number" class="ctrl-value" id="v_spread" value="250" step="any"></div>
           <input type="range" id="r_spread" min="0" max="5000" step="10" value="250">
+          <div id="spread_calib_warn" style="display:none; font-size: 10px; color: var(--amber); font-style: italic; margin-top: 4px; line-height: 1.4;">
+            ⚠ Inactive in calibration mode — spread is back-solved from the premium targets below.
+          </div>
         </div>
 
         <div class="ctrl">
@@ -1427,6 +1430,7 @@ function applyCalibrateUI() {
   document.getElementById('ctrl_targetconvprem').classList.toggle('disabled', !params.calibrate);
   document.getElementById('ctrl_targetivprem').classList.toggle('disabled', !params.calibrate);
   document.getElementById('calib_readout').style.opacity = params.calibrate ? '1' : '0.35';
+  document.getElementById('spread_calib_warn').style.display = params.calibrate ? 'block' : 'none';
 }
 calibrateEl.addEventListener('change', () => {
   params.calibrate = calibrateEl.checked;
