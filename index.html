@@ -1966,11 +1966,18 @@ function refreshTakeover(cbMark, Teff) {
       if (!isNaN(n)) FTSE_REF[fk] = n;
     });
     const name = qs.get('name');
+    const isin = qs.get('isin');
     if (name) {
       document.title = name + ' — CB Pricer';
       const label = document.getElementById('cb_name_label');
       if (label) {
         label.textContent = name;
+        if (isin) {
+          const isinEl = document.createElement('span');
+          isinEl.textContent = isin;
+          isinEl.style.cssText = 'margin-left: 8px; font-size: 0.85em; opacity: 0.7; font-variant-numeric: tabular-nums;';
+          label.appendChild(isinEl);
+        }
         label.style.display = 'inline';
       }
     }
