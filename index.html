@@ -63,6 +63,28 @@
     color: var(--text-mute);
     font-weight: 400;
   }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .hbtn {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    color: var(--text);
+    background: var(--panel-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, transform 0.05s;
+    white-space: nowrap;
+  }
+  .hbtn:hover { border-color: var(--amber-dim); color: var(--amber); }
+  .hbtn:active { transform: translateY(1px); }
+  .hbtn.primary {
+    background: rgba(212,165,116,0.12);
+    border-color: var(--amber-dim);
+    color: var(--amber);
+  }
+  .hbtn.primary:hover { background: rgba(212,165,116,0.2); }
 
   main {
     display: grid;
@@ -528,7 +550,11 @@
       <div class="brand"><span class="accent">CB</span> Pricer<span id="cb_name_label" style="margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border, rgba(255,255,255,0.12)); font-weight: 400; font-size: 0.85em; color: var(--text-mute); display: none;"></span></div>
       <div style="font-size: 11px; color: var(--text-mute); margin-top: 2px; font-style: italic; font-family: 'Instrument Serif', serif;">Convertible bond visualization · Bond floor + equity option decomposition</div>
     </div>
-    <div class="subtitle">v1.1 · Black-Scholes + Binomial (TF)</div>
+    <div class="header-right">
+      <div class="subtitle">v1.1 · Black-Scholes + Binomial (TF)</div>
+      <button class="hbtn" id="btn_copy" title="Copy full pricing payload (JSON) to clipboard">📋 Copy</button>
+      <button class="hbtn primary" id="btn_export" title="Download all pricing, greeks &amp; graphs as a self-contained JSON">⬇ Export</button>
+    </div>
   </header>
 
   <main>
@@ -1312,6 +1338,9 @@ const params = {
 // FTSE benchmark values (populated from URL params if dashboard deep-links)
 const FTSE_REF = { cb: null, parity: null, theo: null, bf: null };
 
+// Latest computed result — rebuilt on every refresh(), consumed by the export.
+let LAST_RESULT = null;
+
 const fmt = {
   num: (x, d=2) => isFinite(x) ? x.toFixed(d) : '—',
   pct: (x, d=1) => (x * 100).toFixed(d) + '%',
@@ -1893,6 +1922,60 @@ function refresh() {
     callSubEl.textContent = 'not callable';
   }
 
+  // ── Snapshot everything for export (numbers only; charts captured at export time)
+  LAST_RESULT = {
+    inputs: {
+      face, coupon_pct: coupon * 100, T_years: params.T, elapsed_days: params.elapsed, T_eff_years: Teff,
+      conversionPrice: K, conversionRatio: ratio, stock: S,
+      riskFree_pct: r * 100, divYield_pct: q * 100,
+      inputVol_pct: params.iv * 100, realizedVol_pct: rv * 100,
+      creditSpread_bps: Math.round(params.spread * 10000), recovery_pct: params.RR * 100,
+      calibrate: params.calibrate, targetConvPrem_pct: params.targetConvPrem, targetIvPrem_pct: params.targetIvPrem,
+      callable: params.callable, callPrice: params.callPrice, callDate_years: params.callDate,
+      effectiveVol_pct: iv * 100, effectiveSpread_bps: Math.round(spread * 10000)
+    },
+    ftseRef: { cb: FTSE_REF.cb, parity: FTSE_REF.parity, theo: FTSE_REF.theo, bondFloor: FTSE_REF.bf },
+    outputs: {
+      analytic: {
+        cb, cb_pct_par: cb / face * 100, parity, premium_pct: premium,
+        bondFloor: bf, floorPremium_pct: floorPremium,
+        ytm_pct: ytm * 100, yieldPickup_bps: (ytm - r) * 10000,
+        downside_pct: downsidePct * 100, maxLossWithDefault_pct: maxLossPct * 100,
+        delta_pct: deltaCall * 100, gamma_pct: gammaCall * S,
+        vega_bps: vegaBps, theta_bps: thetaBps, vega_usd: vega, theta_usd_per_day: thetaDay,
+        duration_years: dur
+      },
+      binomial: {
+        cb: bin.price, cb_pct_par: bin.price / face * 100,
+        equityComponent: bin.equity, bondComponent: bin.bond,
+        pRecall_pct: params.callable ? bin.pRecall * 100 : null,
+        delta_pct: deltaBin * 100, gamma_pct: gammaBin * S,
+        vega_bps: vegaBin / face * 10000, theta_bps: thetaDayBin / face * 10000,
+        earlyExercisePrem: earlyPrem, issuerCallCost: params.callable ? Math.max(callCost, 0) : null
+      },
+      probabilities: {
+        pConvert_pct: pConv * 100, pDefaultByT_pct: pDef * 100,
+        pConvertAndSurvive_pct: pConv * pSurv * 100, hazardRate: lam
+      },
+      pnl: {
+        volSpread_pts: volSpread, gammaDaily_usd: dailyPnL, gammaAnnual_usd: annualPnL,
+        gammaAnnual_pct: pct, vegaPer1pt_usd: vega, creditDV01x10bp_usd: creditPnL10bp,
+        couponCarry_per_day_usd: couponDay
+      },
+      takeover: null   // filled by refreshTakeover below
+    },
+    curves: {
+      stock: cbCurve.map(p => p.x),
+      cb: cbCurve.map(p => p.y),
+      parity: parityCurve.map(p => p.y),
+      bondFloor: floorCurve.map(p => p.y),
+      cbAtRealizedVol: fairRvCurve.map(p => p.y),
+      cbPreCalibration: params.calibrate ? cbModelCurve.map(p => p.y) : null,
+      delta_pct: deltaCurve.map(p => p.y),
+      gamma_pct: gammaCurve.map(p => p.y)
+    }
+  };
+
   // Takeover module
   refreshTakeover(cb, Teff);
 }
@@ -1931,6 +2014,13 @@ function refreshTakeover(cbMark, Teff) {
   const pnlPctEl = document.getElementById('to_pnl_pct');
   pnlPctEl.textContent = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '% return';
   pnlPctEl.className = 'stat-sub ' + (pnlPct >= 0 ? 'bull' : 'bear');
+
+  if (LAST_RESULT) LAST_RESULT.outputs.takeover = {
+    offerPrice: offer, makeWholeVol_pct: mwvol * 100, cocPutStrike_pct: cocPct * 100,
+    parity: today.parity, premiumVsCB_pct: premVsCB, extraMakeWholeShares: today.extraShares,
+    proceeds: today.final, proceeds_pct_par: today.final / face * 100,
+    pnl_usd: pnl, pnl_pct: pnlPct
+  };
 
   // Chart sweep over T_remain ∈ [0, Teff]
   const N = 60;
@@ -2001,6 +2091,88 @@ function refreshTakeover(cbMark, Teff) {
     console.warn('CB pricer URL params load error:', e);
   }
 })();
+
+// ──────────────────────────────────────────────────────────────
+// EXPORT — self-contained JSON payload (pricing + greeks + graphs)
+// for re-integration into a trading form / ticket.
+// ──────────────────────────────────────────────────────────────
+function chartPNG(chart, bg = '#0c0c0c') {
+  const src = chart.canvas;
+  const c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = bg;                 // flatten transparency so it reads on light forms too
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(src, 0, 0);
+  return c.toDataURL('image/png');
+}
+
+function buildExport(includeCharts = true) {
+  if (!LAST_RESULT) refresh();
+  const qs = new URLSearchParams(window.location.search);
+  const payload = {
+    meta: {
+      tool: 'cb_pricer',
+      version: 'v1.1',
+      name: qs.get('name') || null,
+      isin: qs.get('isin') || null,
+      generatedAt: new Date().toISOString()
+    },
+    ...JSON.parse(JSON.stringify(LAST_RESULT))
+  };
+  if (includeCharts) {
+    payload.charts = {
+      priceDecomposition: chartPNG(mainChart),
+      greeks: chartPNG(greeksChart),
+      takeover: chartPNG(takeoverChart)
+    };
+  }
+  return payload;
+}
+
+function exportBaseName() {
+  const qs = new URLSearchParams(window.location.search);
+  const raw = qs.get('isin') || qs.get('name') || 'cb_pricing';
+  return raw.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'cb_pricing';
+}
+
+function exportJSON() {
+  const json = JSON.stringify(buildExport(true), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = exportBaseName() + '_pricing.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function flashBtn(btn, msg) {
+  const orig = btn.dataset.label || btn.textContent;
+  btn.dataset.label = orig;
+  btn.textContent = msg;
+  setTimeout(() => { btn.textContent = btn.dataset.label; }, 1400);
+}
+
+async function copyExport() {
+  const btn = document.getElementById('btn_copy');
+  const json = JSON.stringify(buildExport(false), null, 2);  // numbers only — light enough to paste
+  try {
+    await navigator.clipboard.writeText(json);
+    flashBtn(btn, '✓ Copied');
+  } catch (e) {
+    // Fallback for non-secure contexts / clipboard denied
+    const ta = document.createElement('textarea');
+    ta.value = json; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); flashBtn(btn, '✓ Copied'); }
+    catch (_) { flashBtn(btn, '⚠ Copy failed'); }
+    ta.remove();
+  }
+}
+
+document.getElementById('btn_export').addEventListener('click', exportJSON);
+document.getElementById('btn_copy').addEventListener('click', copyExport);
 
 refresh();
 </script>
