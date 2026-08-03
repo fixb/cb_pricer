@@ -933,8 +933,8 @@
 
         <div class="takeover-controls">
           <div class="ctrl-inline">
-            <label>Offer price ($)</label>
-            <input type="number" id="t_offer" value="120" step="any">
+            <label>Offer price ($) <span class="unit">spot +25%</span></label>
+            <input type="number" id="t_offer" value="112.50" step="any" readonly title="Auto: stock price × 1.25 (25% takeover premium)">
           </div>
           <div class="ctrl-inline">
             <label>Makewhole vol (%)</label>
@@ -1646,7 +1646,8 @@ const greeksChart = makeChart('chart_greeks', [
 // ──────────────────────────────────────────────────────────────
 // TAKEOVER MODULE
 // ──────────────────────────────────────────────────────────────
-const takeover = { offer: 120, mwvol: 0.30, cocPct: 1.00 };
+const TAKEOVER_PREMIUM = 0.25; // offer price = stock price × (1 + 25%)
+const takeover = { offer: 112.50, mwvol: 0.30, cocPct: 1.00 };
 
 function bindTakeover(id, key, scale = 1) {
   const inp = document.getElementById(id);
@@ -1659,7 +1660,7 @@ function bindTakeover(id, key, scale = 1) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
   inp.addEventListener('focus', () => inp.select());
 }
-bindTakeover('t_offer', 'offer');
+// Offer price is auto-derived (spot +25%) in refreshTakeover — not user-editable.
 bindTakeover('t_mwvol', 'mwvol', 0.01);
 bindTakeover('t_coc',   'cocPct', 0.01);
 
@@ -2065,7 +2066,12 @@ function refresh() {
 // TAKEOVER REFRESH
 // ──────────────────────────────────────────────────────────────
 function refreshTakeover(cbMark, Teff) {
-  const { face, K, r, q } = params;
+  const { face, K, r, q, S } = params;
+
+  // Offer price = current stock price + 25% takeover premium (auto-derived).
+  takeover.offer = S * (1 + TAKEOVER_PREMIUM);
+  document.getElementById('t_offer').value = takeover.offer.toFixed(2);
+
   const { offer, mwvol, cocPct } = takeover;
   const cocPut = face * cocPct;
 
