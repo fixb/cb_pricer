@@ -702,13 +702,13 @@
         </div>
 
         <div class="ctrl" id="ctrl_callprice">
-          <div class="ctrl-row"><span class="ctrl-label">Call price <span class="unit">(% of par)</span></span><input type="number" class="ctrl-value" id="v_callprice" value="100.00" step="any"></div>
-          <input type="range" id="r_callprice" min="100" max="130" step="0.5" value="100">
+          <div class="ctrl-row"><span class="ctrl-label">Call price <span class="unit">(% of par)</span></span><input type="number" class="ctrl-value" id="v_callprice" value="130.00" step="any"></div>
+          <input type="range" id="r_callprice" min="100" max="150" step="0.5" value="130">
         </div>
 
         <div class="ctrl" id="ctrl_calldate">
-          <div class="ctrl-row"><span class="ctrl-label">First call date <span class="unit">(yrs)</span></span><input type="number" class="ctrl-value" id="v_calldate" value="3.00" step="any"></div>
-          <input type="range" id="r_calldate" min="0" max="15" step="0.1" value="3">
+          <div class="ctrl-row"><span class="ctrl-label">First call date <span class="unit">(yrs · ½ maturity)</span></span><input type="number" class="ctrl-value" id="v_calldate" value="2.50" step="any"></div>
+          <input type="range" id="r_calldate" min="0" max="15" step="0.1" value="2.5">
           <div class="ctrl-row" style="margin-top: 6px;">
             <span class="ctrl-label"><span class="unit">or by date</span></span>
             <input type="date" class="ctrl-value ctrl-date" id="v_calldate_date">
@@ -1409,7 +1409,7 @@ const params = {
   S: 90, r: 0.03, q: 0.01,
   iv: 0.28, rv: 0.25, spread: 0.025, RR: 0.40,
   elapsed: 0,
-  callable: false, callPrice: 100, callDate: 3,
+  callable: false, callPrice: 130, callDate: 2.5,
   calibrate: false, targetConvPrem: 25, targetIvPrem: 10
 };
 
@@ -1470,6 +1470,13 @@ bind('r_spread',  'v_spread',  'spread',  0.0001, v => Math.round(v).toString())
 bind('r_RR',      'v_RR',      'RR',      0.01,   v => Math.round(v).toString());
 bind('r_elapsed', 'v_elapsed', 'elapsed', 1,    v => Math.round(v).toString());
 bind('r_callprice', 'v_callprice', 'callPrice', 1, v => v.toFixed(2));
+// First call date defaults to ½ the maturity and tracks it, until the user
+// edits it manually. These flag-setters are registered BEFORE the bind below
+// so they run first and clear the auto flag before bind's refresh() fires —
+// otherwise the same-tick refresh would overwrite the user's value with ½T.
+let callDateAuto = true;
+document.getElementById('r_calldate').addEventListener('input', () => { callDateAuto = false; });
+document.getElementById('v_calldate').addEventListener('change', () => { callDateAuto = false; });
 bind('r_calldate',  'v_calldate',  'callDate',  1, v => v.toFixed(2));
 bind('r_targetconvprem', 'v_targetconvprem', 'targetConvPrem', 1, v => v.toFixed(2));
 bind('r_targetivprem',   'v_targetivprem',   'targetIvPrem',   1, v => v.toFixed(2));
@@ -1516,6 +1523,7 @@ function bindDate(dateId, numId, rangeId, key) {
   nInp.addEventListener('change', syncDate);
 }
 bindDate('v_T_date',        'v_T',        'r_T',        'T');
+document.getElementById('v_calldate_date').addEventListener('change', () => { callDateAuto = false; });
 bindDate('v_calldate_date', 'v_calldate', 'r_calldate', 'callDate');
 
 // Callable toggle
@@ -1698,6 +1706,16 @@ const takeoverChart = makeChart('chart_takeover', [
 // REFRESH
 // ──────────────────────────────────────────────────────────────
 function refresh() {
+  // First call date auto-tracks ½ the maturity until the user overrides it.
+  if (callDateAuto) {
+    const half = Math.max(0.01, params.T / 2);
+    params.callDate = half;
+    document.getElementById('v_calldate').value = half.toFixed(2);
+    const rc = document.getElementById('r_calldate');
+    rc.value = Math.max(parseFloat(rc.min), Math.min(parseFloat(rc.max), half));
+    document.getElementById('v_calldate_date').value = dateFromYears(half);
+  }
+
   // Effective remaining maturity after time elapsed
   const Teff = Math.max(params.T - params.elapsed / 365, 0.001);
   document.getElementById('v_T_eff').textContent = Teff.toFixed(2) + 'y';
