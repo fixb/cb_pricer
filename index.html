@@ -426,6 +426,37 @@
     -webkit-appearance: none; margin: 0;
   }
 
+  /* What-if / scenario stress table */
+  .scenario-wrap { overflow-x: auto; }
+  .scenario-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .scenario-table th {
+    text-align: right; font-size: 9px; text-transform: uppercase; letter-spacing: 1.4px;
+    color: var(--text-mute); font-weight: 500; padding: 8px 10px;
+    border-bottom: 1px solid var(--border-strong); white-space: nowrap;
+  }
+  .scenario-table th:first-child { text-align: left; }
+  .scenario-table td {
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace; text-align: right; white-space: nowrap;
+  }
+  .scenario-table td.sc-name { text-align: left; font-family: inherit; color: var(--text); }
+  .scenario-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+  .sc-group-row td {
+    font-family: inherit; font-size: 9px; text-transform: uppercase; letter-spacing: 1.6px;
+    color: var(--amber-dim); padding: 13px 10px 4px; border-bottom: none;
+  }
+  .sc-shock { color: var(--text); }
+  .sc-zero { color: var(--border-strong); }
+  .sc-cb { color: var(--amber); }
+  .sc-delta.bull { color: var(--bull); }
+  .sc-delta.bear { color: var(--bear); }
+  .sc-custom td { background: rgba(212,165,116,0.07); border-bottom: 1px solid var(--amber-dim); }
+  .sc-custom td.sc-name { color: var(--amber); }
+  @media (max-width: 640px) {
+    .scenario-table { font-size: 11px; }
+    .scenario-table th, .scenario-table td { padding: 6px 6px; }
+  }
+
   .ctrl-toggle {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 14px;
@@ -940,6 +971,53 @@
 
         <div class="chart-container">
           <canvas id="chart_takeover"></canvas>
+        </div>
+      </div>
+
+      <!-- WHAT-IF / SCENARIO MODULE -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">What-if scenarios <span style="color: var(--text-mute); font-size: 13px; font-style: normal;">— instant stress of the CB fair value to equity, credit, vol &amp; rate shocks</span></div>
+        </div>
+
+        <div class="takeover-controls" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="ctrl-inline">
+            <label>Equity shock (%)</label>
+            <input type="number" id="sc_eq" value="-10" step="any">
+          </div>
+          <div class="ctrl-inline">
+            <label>Credit shock (bps)</label>
+            <input type="number" id="sc_credit" value="50" step="any">
+          </div>
+          <div class="ctrl-inline">
+            <label>Vol shock (pts)</label>
+            <input type="number" id="sc_vol" value="5" step="any">
+          </div>
+          <div class="ctrl-inline">
+            <label>Rates shock (bps)</label>
+            <input type="number" id="sc_rate" value="0" step="any">
+          </div>
+        </div>
+
+        <div class="scenario-wrap">
+          <table class="scenario-table">
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Equity</th>
+                <th>Credit</th>
+                <th>Vol</th>
+                <th>Rates</th>
+                <th>CB fair value</th>
+                <th>Δ vs base</th>
+              </tr>
+            </thead>
+            <tbody id="scenario_body"></tbody>
+          </table>
+        </div>
+
+        <div class="footer-note" style="margin-top: 14px;">
+          Each scenario reprices the closed-form fair value (Bond Floor + Ratio × Black-Scholes call) with the shocks applied on top of the effective vol &amp; spread — instantaneous, with time-to-maturity held constant. Base = current CB fair value <span id="sc_base" style="color: var(--amber); font-family: 'JetBrains Mono', monospace;">—</span>. The Custom row (highlighted) is driven by the four inputs above; the grid below is a fixed stress matrix. All rows are included in the JSON export.
         </div>
       </div>
 
@@ -1978,6 +2056,9 @@ function refresh() {
 
   // Takeover module
   refreshTakeover(cb, Teff);
+
+  // What-if scenario stress (uses effective vol/spread & analytic base price)
+  refreshScenarios({ S, K, Teff, r, q, iv, spread, face, coupon, ratio, cbBase: cb });
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -2039,6 +2120,111 @@ function refreshTakeover(cbMark, Teff) {
   takeoverChart.data.datasets[3].data = mark;
   takeoverChart.update('none');
 }
+
+// ──────────────────────────────────────────────────────────────
+// WHAT-IF / SCENARIO STRESS
+// Reprices the closed-form fair value (Bond Floor + Ratio × BS call)
+// under instantaneous shocks to equity, credit spread, vol and rates.
+// T is held constant; shocks stack on top of the effective vol/spread.
+// ──────────────────────────────────────────────────────────────
+const scenarioState = { dEq: -10, dCredit: 50, dVol: 5, dRate: 0 };
+
+const SCENARIOS = [
+  { group: 'Equity',   name: 'Equity −20%',        dEq: -20 },
+  { group: 'Equity',   name: 'Equity −10%',        dEq: -10 },
+  { group: 'Equity',   name: 'Equity −5%',         dEq: -5  },
+  { group: 'Equity',   name: 'Equity +5%',         dEq: 5   },
+  { group: 'Equity',   name: 'Equity +10%',        dEq: 10  },
+  { group: 'Equity',   name: 'Equity +20%',        dEq: 20  },
+  { group: 'Credit',   name: 'Credit +25 bps',     dCredit: 25  },
+  { group: 'Credit',   name: 'Credit +50 bps',     dCredit: 50  },
+  { group: 'Credit',   name: 'Credit +100 bps',    dCredit: 100 },
+  { group: 'Credit',   name: 'Credit −50 bps',     dCredit: -50 },
+  { group: 'Vol',      name: 'Vol +5 pts',         dVol: 5  },
+  { group: 'Vol',      name: 'Vol +10 pts',        dVol: 10 },
+  { group: 'Vol',      name: 'Vol −5 pts',         dVol: -5 },
+  { group: 'Rates',    name: 'Rates +50 bps',      dRate: 50  },
+  { group: 'Rates',    name: 'Rates +100 bps',     dRate: 100 },
+  { group: 'Combined', name: 'Risk-off sell-off',  dEq: -15, dCredit: 75,  dVol: 8  },
+  { group: 'Combined', name: 'Sharp crash',        dEq: -30, dCredit: 200, dVol: 15 },
+  { group: 'Combined', name: 'Credit crunch',      dEq: -10, dCredit: 150, dVol: 5  },
+  { group: 'Combined', name: 'Rates shock',        dEq: -5,  dRate: 100,  dCredit: 25 },
+  { group: 'Combined', name: 'Melt-up rally',      dEq: 20,  dCredit: -40, dVol: -4 }
+];
+
+function priceUnderShock(ctx, sh) {
+  const S2      = ctx.S * (1 + (sh.dEq || 0) / 100);
+  const iv2     = Math.max(ctx.iv + (sh.dVol || 0) / 100, 1e-4);
+  const spread2 = Math.max(ctx.spread + (sh.dCredit || 0) / 10000, 0);
+  const r2      = ctx.r + (sh.dRate || 0) / 10000;
+  const bf2     = bondFloor(ctx.face, ctx.coupon, ctx.Teff, r2, spread2);
+  const cb2     = bf2 + ctx.ratio * bsCall(S2, ctx.K, ctx.Teff, r2, ctx.q, iv2);
+  return { cb: cb2, bondFloor: bf2, parity: ctx.ratio * S2, stock: S2 };
+}
+
+function refreshScenarios(ctx) {
+  const base = ctx.cbBase;
+  document.getElementById('sc_base').textContent = '= $' + base.toFixed(2);
+
+  const shockCell = (v, unit) => {
+    if (!v) return '<td class="sc-shock sc-zero">·</td>';
+    const dec = Number.isInteger(v) ? 0 : 1;
+    return '<td class="sc-shock">' + (v > 0 ? '+' : '') + v.toFixed(dec) + unit + '</td>';
+  };
+  const rowHtml = (name, sh, cls) => {
+    const p    = priceUnderShock(ctx, sh);
+    const d    = p.cb - base;
+    const dPct = base ? d / base * 100 : 0;
+    const dCls = d >= 0 ? 'bull' : 'bear';
+    return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' +
+      '<td class="sc-name">' + name + '</td>' +
+      shockCell(sh.dEq, '%') +
+      shockCell(sh.dCredit, ' bp') +
+      shockCell(sh.dVol, ' pt') +
+      shockCell(sh.dRate, ' bp') +
+      '<td class="sc-cb">$' + p.cb.toFixed(2) + '</td>' +
+      '<td class="sc-delta ' + dCls + '">' + (d >= 0 ? '+' : '') + d.toFixed(2) +
+        ' <span style="opacity:.6">(' + (dPct >= 0 ? '+' : '') + dPct.toFixed(1) + '%)</span></td>' +
+      '</tr>';
+  };
+
+  let html = rowHtml('Custom what-if', scenarioState, 'sc-custom');
+  let lastGroup = null;
+  for (const sc of SCENARIOS) {
+    if (sc.group !== lastGroup) {
+      html += '<tr class="sc-group-row"><td colspan="7">' + sc.group + '</td></tr>';
+      lastGroup = sc.group;
+    }
+    html += rowHtml(sc.name, sc);
+  }
+  document.getElementById('scenario_body').innerHTML = html;
+
+  // ── Snapshot for export
+  if (LAST_RESULT) {
+    const pack = (name, sh) => {
+      const p = priceUnderShock(ctx, sh);
+      return {
+        name,
+        shock: { equity_pct: sh.dEq || 0, credit_bps: sh.dCredit || 0, vol_pts: sh.dVol || 0, rate_bps: sh.dRate || 0 },
+        cb: p.cb, cb_pct_par: p.cb / ctx.face * 100,
+        deltaVsBase_usd: p.cb - base, deltaVsBase_pct: base ? (p.cb - base) / base * 100 : 0,
+        bondFloor: p.bondFloor, parity: p.parity, stock: p.stock
+      };
+    };
+    LAST_RESULT.outputs.scenarios = {
+      base_cb: base,
+      custom: pack('Custom what-if', scenarioState),
+      grid: SCENARIOS.map(sc => ({ group: sc.group, ...pack(sc.name, sc) }))
+    };
+  }
+}
+
+// Custom scenario inputs → live re-price
+[['sc_eq', 'dEq'], ['sc_credit', 'dCredit'], ['sc_vol', 'dVol'], ['sc_rate', 'dRate']].forEach(([id, key]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { scenarioState[key] = parseFloat(el.value) || 0; refresh(); });
+  el.addEventListener('focus', () => el.select());
+});
 
 // ──────────────────────────────────────────────────────────────
 // Load values from URL query params (e.g. opened from CB index dashboard)
@@ -2113,7 +2299,7 @@ function buildExport(includeCharts = true) {
   const payload = {
     meta: {
       tool: 'cb_pricer',
-      version: 'v1.1',
+      version: 'v1.2',
       name: qs.get('name') || null,
       isin: qs.get('isin') || null,
       generatedAt: new Date().toISOString()
